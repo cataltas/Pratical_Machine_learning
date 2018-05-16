@@ -1,0 +1,74 @@
+---
+title: "Machine Learning"
+author: "Camille Taltas"
+date: "27/04/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Upload and Clean Data
+
+Upload the data, make all the missing values zero and remove the first 7 columns which do not give any information on performance. 
+```{r data}
+require(caret)
+require(mlbench)
+require(parallel)
+require(doParallel)
+test<-read.csv("pml-testing.csv")
+train<-read.csv("pml-training.csv")
+train <- train[, (colSums(is.na(train)|train ==""|train =="#DIV/0!") == 0)]
+test <- test[, (colSums(is.na(train)|train ==""|train =="#DIV/0!") == 0)]
+train<-train[,-c(1:7)]
+test<-test[,-c(1:7)]
+```
+
+#Partition
+
+Partition the training set.
+```{r partition}
+training<-createDataPartition(train$classe,p=0.6,list=FALSE)
+train_set<-train[training,]
+test_set<-train[-training,]
+```
+
+#Classification Tree
+
+First, we will model the set with a classification tree.
+```{r tree}
+control <- trainControl(method="cv", number=5,allowParallel = TRUE)
+cluster <- makeCluster(detectCores() - 1) 
+registerDoParallel(cluster)
+class_tree <- train(classe~., data=train_set, method="rpart", trControl=control)
+stopCluster(cluster)
+registerDoSEQ()
+require(rpart.plot)
+rpart.plot(class_tree$finalModel,main="Classification Tree Model Prediction")
+pred_T<-predict(class_tree,newdata=test_set)
+confusionMatrix(test_set$classe,pred_T)
+```
+Here, we see that our accuracy rate is only of 49%. Hence, we need to try a different model in order to better fit our data set.
+
+#Random Forest
+
+We will now try a random forest model on our dataset. 
+```{r rf}
+require(randomForest)
+cluster <- makeCluster(detectCores() - 1) 
+registerDoParallel(cluster)
+rand_forest <- randomForest(classe~., data=train_set, trControl=control)
+stopCluster(cluster)
+registerDoSEQ()
+pred_r<-predict(rand_forest,newdata=test_set)
+confusionMatrix(test_set$classe,pred_r)
+```
+We now observe an accuracy rate of 99%, which is much better than the classification tree model. Thus, we will use this model in order to predict the "classe" variable on our test set. 
+
+#Prediction Results 
+
+Finally, with our random forest model we will predict the classes of our testing set. 
+```{r result}
+predict(rand_forest,newdata=test)
+```
